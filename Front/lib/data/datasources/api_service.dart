@@ -178,23 +178,21 @@ class ApiService {
         for (var item in responseData) {
           try {
             // Adapta os dados da API para o formato MediaContent
-            MediaContent content;
-            
+            MediaContent? content;
+
             // Verifica se é texto ou mídia baseado nos campos disponíveis
-            if (item['message_text'] != null && item['message_text'].toString().isNotEmpty) {
+            if (item['tex'] != null && item['tex'].toString().isNotEmpty) {
               content = MediaContent(
-                id: item['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+                id: item['key_id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
                 type: MediaType.text,
-                content: item['message_text'].toString(),
-                createdAt: item['created_at'] != null 
-                    ? DateTime.tryParse(item['created_at'].toString()) ?? DateTime.now()
-                    : DateTime.now(),
+                content: item['tex'].toString(),
+                createdAt: DateTime.now(), // Como não há timestamp na API, usa o atual
               );
-            } else if (item['media_path'] != null) {
+            } else if (item['media_url'] != null) {
               // Determina o tipo de mídia baseado na extensão ou campo
-              MediaType mediaType = MediaType.text;
-              String mediaPath = item['media_path'].toString();
-              
+              MediaType? mediaType;
+              String mediaPath = item['media_url'].toString();
+
               if (item['media_type'] != null) {
                 switch (item['media_type'].toString().toLowerCase()) {
                   case 'image':
@@ -206,8 +204,6 @@ class ApiService {
                   case 'audio':
                     mediaType = MediaType.audio;
                     break;
-                  default:
-                    mediaType = MediaType.text;
                 }
               } else {
                 // Tenta determinar pelo nome do arquivo
@@ -220,38 +216,24 @@ class ApiService {
                   mediaType = MediaType.audio;
                 }
               }
-              
-              content = MediaContent(
-                id: item['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
-                type: mediaType,
-                content: mediaPath,
-                createdAt: item['created_at'] != null 
-                    ? DateTime.tryParse(item['created_at'].toString()) ?? DateTime.now()
-                    : DateTime.now(),
-                fileName: mediaPath.split('/').last,
-              );
-            } else {
-              // Fallback para texto vazio se não há conteúdo
-              content = MediaContent(
-                id: item['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
-                type: MediaType.text,
-                content: item.toString(), // Converte o objeto inteiro para string
-                createdAt: item['created_at'] != null 
-                    ? DateTime.tryParse(item['created_at'].toString()) ?? DateTime.now()
-                    : DateTime.now(),
-              );
+
+              if (mediaType != null) {
+                content = MediaContent(
+                  id: item['key_id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+                  type: mediaType,
+                  content: mediaPath,
+                  createdAt: DateTime.now(), // Como não há timestamp na API, usa o atual
+                  fileName: mediaPath.split('/').last,
+                );
+              }
             }
-            
-            messages.add(content);
+
+            if (content != null) {
+              messages.add(content);
+            }
           } catch (e) {
             print('Erro ao processar item da API: $e');
-            // Adiciona como texto em caso de erro
-            messages.add(MediaContent(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
-              type: MediaType.text,
-              content: 'Erro ao processar: ${item.toString()}',
-              createdAt: DateTime.now(),
-            ));
+            // Não adiciona conteúdo inválido - apenas registra o erro
           }
         }
         

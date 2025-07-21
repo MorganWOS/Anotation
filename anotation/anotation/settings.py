@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'crud.apps.CrudConfig',
     'corsheaders',
     'message.apps.MessageConfig',
+    'sessao.apps.SessaoConfig',
 ]
 
 REST_FRAMEWORK = {
