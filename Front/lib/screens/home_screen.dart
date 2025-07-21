@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import '../data/models/session.dart';
+import '../data/models/media_content.dart';
+import '../shared/widgets/media_content_widget.dart';
+import '../shared/widgets/media_toolbar.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -9,62 +13,69 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _noteController = TextEditingController();
-  final List<String> _notes = [];
   int _selectedSessionIndex = 0;
   
-  // Lista de sessões de anotações
-  final List<Map<String, dynamic>> _sessions = [
-    {
-      'title': 'Sessão 1 - Ideias Principais',
-      'lastModified': 'Hoje, 14:30',
-      'notes': ['Primeira anotação da sessão 1', 'Segunda anotação importante'],
-    },
-    {
-      'title': 'Sessão 2 - Reunião',
-      'lastModified': 'Ontem, 16:20',
-      'notes': ['Pontos discutidos na reunião', 'Ações a serem tomadas'],
-    },
-    {
-      'title': 'Sessão 3 - Estudos',
-      'lastModified': '2 dias atrás',
-      'notes': ['Conceitos aprendidos', 'Dúvidas para revisar'],
-    },
+  // Lista de sessões com suporte a mídia
+  final List<Session> _sessions = [
+    Session(
+      id: '1',
+      title: 'Sessão 1 - Ideias Principais',
+      createdAt: DateTime.now().subtract(const Duration(days: 0)),
+      lastModified: DateTime.now().subtract(const Duration(hours: 2)),
+      contents: [
+        MediaContent.createText('Primeira anotação da sessão 1'),
+        MediaContent.createText('Segunda anotação importante'),
+      ],
+    ),
+    Session(
+      id: '2', 
+      title: 'Sessão 2 - Reunião',
+      createdAt: DateTime.now().subtract(const Duration(days: 1)),
+      lastModified: DateTime.now().subtract(const Duration(hours: 8)),
+      contents: [
+        MediaContent.createText('Pontos discutidos na reunião'),
+        MediaContent.createText('Ações a serem tomadas'),
+      ],
+    ),
+    Session(
+      id: '3',
+      title: 'Sessão 3 - Estudos',
+      createdAt: DateTime.now().subtract(const Duration(days: 2)),
+      lastModified: DateTime.now().subtract(const Duration(days: 2)),
+      contents: [
+        MediaContent.createText('Conceitos aprendidos'),
+        MediaContent.createText('Dúvidas para revisar'),
+      ],
+    ),
   ];
 
-  @override
-  void initState() {
-    super.initState();
-    _loadCurrentSession();
-  }
+  Session get _currentSession => _sessions[_selectedSessionIndex];
 
-  void _loadCurrentSession() {
-    setState(() {
-      _notes.clear();
-      _notes.addAll(List<String>.from(_sessions[_selectedSessionIndex]['notes']));
-    });
-  }
-
-  void _addNote() {
+  void _addTextNote() {
     if (_noteController.text.isNotEmpty) {
+      final textContent = MediaContent.createText(_noteController.text);
       setState(() {
-        _notes.add(_noteController.text);
-        _sessions[_selectedSessionIndex]['notes'].add(_noteController.text);
+        _sessions[_selectedSessionIndex] = _currentSession.addContent(textContent);
         _noteController.clear();
       });
     }
   }
 
-  void _deleteNote(int index) {
+  void _addMediaContent(MediaContent mediaContent) {
     setState(() {
-      _notes.removeAt(index);
-      _sessions[_selectedSessionIndex]['notes'].removeAt(index);
+      _sessions[_selectedSessionIndex] = _currentSession.addContent(mediaContent);
+    });
+  }
+
+  void _deleteContent(String contentId) {
+    setState(() {
+      _sessions[_selectedSessionIndex] = _currentSession.removeContent(contentId);
     });
   }
 
   void _selectSession(int index) {
     setState(() {
       _selectedSessionIndex = index;
-      _loadCurrentSession();
     });
     Navigator.pop(context); // Fecha o drawer
   }
@@ -91,14 +102,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ElevatedButton(
               onPressed: () {
                 if (newTitle.isNotEmpty) {
+                  final newSession = Session.createNew(newTitle);
                   setState(() {
-                    _sessions.add({
-                      'title': newTitle,
-                      'lastModified': 'Agora',
-                      'notes': <String>[],
-                    });
+                    _sessions.add(newSession);
                     _selectedSessionIndex = _sessions.length - 1;
-                    _loadCurrentSession();
                   });
                   Navigator.pop(context);
                   Navigator.pop(context); // Fecha o drawer
@@ -116,7 +123,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_sessions[_selectedSessionIndex]['title']),
+        title: Text(_currentSession.title),
         backgroundColor: Colors.deepPurple,
         foregroundColor: Colors.white,
         leading: Builder(
@@ -190,14 +197,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       title: Text(
-                        session['title'],
+                        session.title,
                         style: TextStyle(
                           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                           color: isSelected ? Colors.deepPurple : null,
                         ),
                       ),
                       subtitle: Text(
-                        '${session['notes'].length} anotações • ${session['lastModified']}',
+                        '${session.getContentSummary()} • ${session.getFormattedLastModified()}',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey[600],
@@ -227,9 +234,9 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
-          // Lista de anotações
+          // Lista de conteúdo de mídia
           Expanded(
-            child: _notes.isEmpty
+            child: _currentSession.contents.isEmpty
                 ? const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -241,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         SizedBox(height: 16),
                         Text(
-                          'Nenhuma anotação ainda',
+                          'Nenhum conteúdo ainda',
                           style: TextStyle(
                             fontSize: 18,
                             color: Colors.grey,
@@ -249,7 +256,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         SizedBox(height: 8),
                         Text(
-                          'Digite sua primeira anotação abaixo',
+                          'Adicione textos, imagens, áudios ou vídeos',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey,
@@ -260,27 +267,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   )
                 : ListView.builder(
                     padding: const EdgeInsets.all(16),
-                    itemCount: _notes.length,
+                    itemCount: _currentSession.contents.length,
                     itemBuilder: (context, index) {
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        elevation: 2,
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(16),
-                          title: Text(
-                            _notes[index],
-                            style: const TextStyle(fontSize: 16),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () => _deleteNote(index),
-                          ),
-                        ),
+                      final content = _currentSession.contents[index];
+                      return MediaContentWidget(
+                        mediaContent: content,
+                        onDelete: () => _deleteContent(content.id),
                       );
                     },
                   ),
           ),
-          // Campo de entrada de nova anotação
+          // Barra de ferramentas de mídia
+          MediaToolbar(
+            onMediaAdded: _addMediaContent,
+          ),
+          // Campo de entrada de texto
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -310,12 +311,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         vertical: 12,
                       ),
                     ),
-                    onSubmitted: (_) => _addNote(),
+                    onSubmitted: (_) => _addTextNote(),
                   ),
                 ),
                 const SizedBox(width: 12),
                 FloatingActionButton(
-                  onPressed: _addNote,
+                  onPressed: _addTextNote,
                   backgroundColor: Colors.deepPurple,
                   child: const Icon(Icons.send, color: Colors.white),
                 ),
