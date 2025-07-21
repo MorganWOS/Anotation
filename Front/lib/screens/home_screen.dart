@@ -3,6 +3,7 @@ import '../data/models/session.dart';
 import '../data/models/media_content.dart';
 import '../shared/widgets/media_content_widget.dart';
 import '../shared/widgets/media_toolbar.dart';
+import '../data/datasources/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -14,6 +15,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _noteController = TextEditingController();
   int _selectedSessionIndex = 0;
+  bool _isLoading = false;
+  List<MediaContent> _apiMessages = [];
+  String? _errorMessage;
   
   // Lista de sessões com suporte a mídia
   final List<Session> _sessions = [
@@ -51,6 +55,52 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Session get _currentSession => _sessions[_selectedSessionIndex];
 
+  @override
+  void initState() {
+    super.initState();
+    _loadSessionMessages();
+  }
+
+  Future<void> _loadSessionMessages() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final result = await ApiService.fetchSessionMessages(_currentSession.id);
+      
+      if (result['success']) {
+        setState(() {
+          _apiMessages = result['data'] as List<MediaContent>;
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _errorMessage = result['message'];
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Erro ao carregar mensagens: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  List<MediaContent> get _allContents {
+    // Combina conteúdos locais e da API
+    final List<MediaContent> allContents = [];
+    allContents.addAll(_currentSession.contents);
+    allContents.addAll(_apiMessages);
+    
+    // Ordena por data de criação
+    allContents.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    
+    return allContents;
+  }
+
   void _addTextNote() {
     if (_noteController.text.isNotEmpty) {
       final textContent = MediaContent.createText(_noteController.text);
@@ -78,6 +128,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _selectedSessionIndex = index;
     });
     Navigator.pop(context); // Fecha o drawer
+    _loadSessionMessages(); // Carrega mensagens da nova sessão
   }
 
   void _createNewSession() {
@@ -133,6 +184,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadSessionMessages,
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
@@ -236,46 +291,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           // Lista de conteúdo de mídia
           Expanded(
-            child: _currentSession.contents.isEmpty
-                ? const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.note_add_outlined,
-                          size: 80,
-                          color: Colors.grey,
-                        ),
-                        SizedBox(height: 16),
-                        Text(
-                          'Nenhum conteúdo ainda',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.grey,
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          'Adicione textos, imagens, áudios ou vídeos',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _currentSession.contents.length,
-                    itemBuilder: (context, index) {
-                      final content = _currentSession.contents[index];
-                      return MediaContentWidget(
-                        mediaContent: content,
-                        onDelete: () => _deleteContent(content.id),
-                      );
-                    },
-                  ),
+            child: _buildContentList(),
           ),
           // Barra de ferramentas de mídia
           MediaToolbar(
@@ -325,6 +341,55 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+    );
+  }
+  Widget _buildContentList() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_errorMessage != null) {
+      return Center(child: Text(_errorMessage!));
+    }
+    if (_allContents.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.note_add_outlined,
+              size: 80,
+              color: Colors.grey,
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Nenhum conteúdo ainda',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Adicione textos, imagens, áudios ou vídeos',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _allContents.length,
+      itemBuilder: (context, index) {
+        final content = _allContents[index];
+        return MediaContentWidget(
+          mediaContent: content,
+          onDelete: () => _deleteContent(content.id),
+        );
+      },
     );
   }
 

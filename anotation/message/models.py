@@ -23,7 +23,7 @@ class Message(models.Model):
     id_sessao = models.ForeignKey('Sessao', models.DO_NOTHING, db_column='id_sessao', blank=True, null=True)
     key_id = models.IntegerField()
     tex = models.TextField(blank=True, null=True)
-    timestamp = models.DateField(auto_now_add=True)
+    timestap = models.DateTimeField(auto_now_add=True)
     media_url = models.TextField(blank=True, null=True)
     media_type = models.TextField(blank=True, null=True)
     media_size = models.IntegerField(blank=True, null=True)

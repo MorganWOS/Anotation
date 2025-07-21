@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
-import 'package:http/http.dart' as http;
+import '../models/media_content.dart';
 
 class ApiService {
   
@@ -155,6 +155,126 @@ class ApiService {
     }
     
     return headers;
+  }
+  
+  // Método para buscar mensagens de uma sessão
+  static Future<Map<String, dynamic>> fetchSessionMessages(String sessionId) async {
+    final url = Uri.parse('http://localhost:8050/message/messages/session/$sessionId/');
+    
+    try {
+      final headers = await getAuthHeaders();
+      
+      final response = await http.get(
+        url,
+        headers: headers,
+      ).timeout(Duration(seconds: ApiConfig.timeoutDuration));
+      
+      if (response.statusCode == 200) {
+        final List<dynamic> responseData = jsonDecode(response.body);
+        
+        // Converte os dados da API para MediaContent
+        List<MediaContent> messages = [];
+        
+        for (var item in responseData) {
+          try {
+            // Adapta os dados da API para o formato MediaContent
+            MediaContent content;
+            
+            // Verifica se é texto ou mídia baseado nos campos disponíveis
+            if (item['message_text'] != null && item['message_text'].toString().isNotEmpty) {
+              content = MediaContent(
+                id: item['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+                type: MediaType.text,
+                content: item['message_text'].toString(),
+                createdAt: item['created_at'] != null 
+                    ? DateTime.tryParse(item['created_at'].toString()) ?? DateTime.now()
+                    : DateTime.now(),
+              );
+            } else if (item['media_path'] != null) {
+              // Determina o tipo de mídia baseado na extensão ou campo
+              MediaType mediaType = MediaType.text;
+              String mediaPath = item['media_path'].toString();
+              
+              if (item['media_type'] != null) {
+                switch (item['media_type'].toString().toLowerCase()) {
+                  case 'image':
+                    mediaType = MediaType.image;
+                    break;
+                  case 'video':
+                    mediaType = MediaType.video;
+                    break;
+                  case 'audio':
+                    mediaType = MediaType.audio;
+                    break;
+                  default:
+                    mediaType = MediaType.text;
+                }
+              } else {
+                // Tenta determinar pelo nome do arquivo
+                String extension = mediaPath.split('.').last.toLowerCase();
+                if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(extension)) {
+                  mediaType = MediaType.image;
+                } else if (['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm'].contains(extension)) {
+                  mediaType = MediaType.video;
+                } else if (['mp3', 'aac', 'wav', 'ogg', 'm4a'].contains(extension)) {
+                  mediaType = MediaType.audio;
+                }
+              }
+              
+              content = MediaContent(
+                id: item['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+                type: mediaType,
+                content: mediaPath,
+                createdAt: item['created_at'] != null 
+                    ? DateTime.tryParse(item['created_at'].toString()) ?? DateTime.now()
+                    : DateTime.now(),
+                fileName: mediaPath.split('/').last,
+              );
+            } else {
+              // Fallback para texto vazio se não há conteúdo
+              content = MediaContent(
+                id: item['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+                type: MediaType.text,
+                content: item.toString(), // Converte o objeto inteiro para string
+                createdAt: item['created_at'] != null 
+                    ? DateTime.tryParse(item['created_at'].toString()) ?? DateTime.now()
+                    : DateTime.now(),
+              );
+            }
+            
+            messages.add(content);
+          } catch (e) {
+            print('Erro ao processar item da API: $e');
+            // Adiciona como texto em caso de erro
+            messages.add(MediaContent(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              type: MediaType.text,
+              content: 'Erro ao processar: ${item.toString()}',
+              createdAt: DateTime.now(),
+            ));
+          }
+        }
+        
+        return {
+          'success': true,
+          'message': 'Mensagens carregadas com sucesso!',
+          'data': messages,
+        };
+      } else {
+        final errorData = jsonDecode(response.body);
+        return {
+          'success': false,
+          'message': _getErrorMessage(errorData),
+          'data': <MediaContent>[],
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Erro de conexão: ${e.toString()}',
+        'data': <MediaContent>[],
+      };
+    }
   }
   
   // Método auxiliar para extrair mensagens de erro

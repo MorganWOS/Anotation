@@ -4,4 +4,5 @@ from .models import Message
 class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
-        fields = '__all__'
+        fields = ['id_sessao', 'key_id', 'tex', 'media_url', 'media_type', 'media_size', 'media_name', 'media_duration']
+        read_only_fields = ['id', 'timestap']

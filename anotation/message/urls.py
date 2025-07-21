@@ -1,12 +1,9 @@
 from django.urls import path
-from .views import MessageView
-
-app_name = 'message'
+from .views import MessageListCreateView, MessageDetailView, MessageSessionView
 
 urlpatterns = [
+    path('messages/', MessageListCreateView.as_view(), name='message-list'),
+    path('messages/<int:pk>/', MessageDetailView.as_view(), name='message-detail'),
 
-    # Usuario endpoints
-    path('message/', MessageView.as_view(), name='message-list'),
-    path('message/<int:pk>/', MessageView.as_view(), name='message-detail'),
-
+    path('messages/session/<int:id_sessao>/', MessageSessionView.as_view(), name='message_session-list')
 ]
