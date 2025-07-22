@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/preferences_service.dart';
+import '../data/datasources/api_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -8,14 +10,39 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  final PreferencesService _prefsService = PreferencesService();
   bool _isDarkMode = false;
   bool _enableNotifications = true;
   bool _autoSave = true;
   String _selectedLanguage = 'Português';
   double _fontSize = 16.0;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    await _prefsService.init();
+    setState(() {
+      _isDarkMode = _prefsService.isDarkMode;
+      _enableNotifications = _prefsService.isNotificationsEnabled;
+      _autoSave = _prefsService.isAutoSaveEnabled;
+      _selectedLanguage = _prefsService.selectedLanguage;
+      _fontSize = _prefsService.fontSize;
+      _isLoading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Configurações'),
@@ -36,10 +63,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'Alterna entre tema claro e escuro',
             _isDarkMode,
             Icons.dark_mode,
-            (value) {
+            (value) async {
               setState(() {
                 _isDarkMode = value;
               });
+              await _prefsService.setDarkMode(value);
+              _showRestartMessage();
             },
           ),
           _buildSliderTile(
@@ -49,10 +78,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Icons.text_fields,
             12.0,
             20.0,
-            (value) {
+            (value) async {
               setState(() {
                 _fontSize = value;
               });
+              await _prefsService.setFontSize(value);
+              _showRestartMessage();
             },
           ),
           
@@ -65,10 +96,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'Receba lembretes sobre suas anotações',
             _enableNotifications,
             Icons.notifications,
-            (value) {
+            (value) async {
               setState(() {
                 _enableNotifications = value;
               });
+              await _prefsService.setNotificationsEnabled(value);
+              
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    value ? 'Notificações ativadas' : 'Notificações desativadas'
+                  ),
+                  backgroundColor: Colors.green,
+                ),
+              );
             },
           ),
           _buildSwitchTile(
@@ -76,10 +117,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'Salva suas anotações automaticamente',
             _autoSave,
             Icons.save,
-            (value) {
+            (value) async {
               setState(() {
                 _autoSave = value;
               });
+              await _prefsService.setAutoSaveEnabled(value);
+              
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    value ? 'Salvamento automático ativado' : 'Salvamento automático desativado'
+                  ),
+                  backgroundColor: Colors.green,
+                ),
+              );
             },
           ),
           
@@ -93,10 +144,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _selectedLanguage,
             Icons.language,
             ['Português', 'Inglês', 'Espanhol'],
-            (value) {
+            (value) async {
               setState(() {
                 _selectedLanguage = value!;
               });
+              await _prefsService.setSelectedLanguage(value!);
+              
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Idioma alterado para $value'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+              _showRestartMessage();
             },
           ),
           
@@ -252,9 +312,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: const Text('Cancelar'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(context);
-                Navigator.pushReplacementNamed(context, '/login');
+                await _performLogout();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
@@ -294,5 +354,77 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       },
     );
+  }
+
+  void _showRestartMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.info, color: Colors.white),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text('Reinicie o aplicativo para aplicar as mudanças'),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 4),
+      ),
+    );
+  }
+
+  Future<void> _performLogout() async {
+    try {
+      // Mostra loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      // Faz logout na API
+      await ApiService.logout();
+      
+      // Limpa preferências locais (mantém configurações de aparência)
+      // Não limpa todas as preferências, apenas tokens
+      
+      // Fecha o loading
+      Navigator.of(context).pop();
+      
+      // Navega para login e remove todas as telas do stack
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/login',
+        (route) => false,
+      );
+      
+      // Mostra mensagem de sucesso
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Logout realizado com sucesso!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      // Fecha o loading se ainda estiver aberto
+      Navigator.of(context).pop();
+      
+      // Mostra erro mas ainda faz logout local
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro no logout: $e'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      
+      // Mesmo com erro na API, faz logout local
+      await ApiService.logout();
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/login',
+        (route) => false,
+      );
+    }
   }
 }

@@ -1,8 +1,9 @@
 // Placeholder para ApiConfig
 class ApiConfig {
-  static const String baseUrl = 'https://api.myapp.com';
-  static const String usersEndpoint = '/users';
-  static const String loginEndpoint = '/login';
+  static const String baseUrl = 'http://localhost:8050';
+  static const String usersEndpoint = '/crud/users/';
+  static const String loginEndpoint = '/token/';
+  static const String sessionEndpoint = '/sessao/sessao/';
   static const int timeoutDuration = 30;
 
   static const Map<String, String> defaultHeaders = {

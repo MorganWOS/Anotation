@@ -1,6 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'api_service.dart';
+import '../data/datasources/api_service.dart';
 
 class AuthService {
   static const String _jwtTokenKey = 'jwt_token';
@@ -82,10 +82,10 @@ class AuthService {
       final data = result['data'];
       
       // Salvar token JWT
-      if (data.containsKey('access_token')) {
+      if (data.containsKey('access')) {
         await saveAuthData(
-          token: data['access_token'],
-          refreshToken: data['refresh_token'],
+          token: data['access'],
+          refreshToken: data['refresh'],
           userData: data['user'],
         );
       }

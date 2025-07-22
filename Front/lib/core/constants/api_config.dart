@@ -7,6 +7,7 @@ class ApiConfig {
   // Endpoints da API
   static const String usersEndpoint = '/crud/users/';
   static const String loginEndpoint = '/token/';
+  static const String sessionEndpoint = '/sessao/sessao/'; // Endpoint para gerenciar sessões
   
   // Timeout para requisições (em segundos)
   static const int timeoutDuration = 30;

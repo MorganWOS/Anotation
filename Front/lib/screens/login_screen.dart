@@ -258,23 +258,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
                   
-                        // Botão Home (para teste)
-                        OutlinedButton(
-                          onPressed: _goToHome,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppTheme.primaryColor,
-                            side: const BorderSide(color: AppTheme.primaryColor),
-                            padding: const EdgeInsets.symmetric(vertical: AppTheme.spacingMedium),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(AppTheme.borderRadiusMedium),
-                            ),
-                          ),
-                    child: const Text(
-                      'Home (Teste)',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
                   
                         // Link para Cadastro
                         Row(

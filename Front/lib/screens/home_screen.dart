@@ -19,56 +19,71 @@ class _HomeScreenState extends State<HomeScreen> {
   List<MediaContent> _apiMessages = [];
   String? _errorMessage;
   
-  // Lista de sessões com suporte a mídia
-  final List<Session> _sessions = [
-    Session(
-      id: '1',
-      title: 'Sessão 1 - Ideias Principais',
-      createdAt: DateTime.now().subtract(const Duration(days: 0)),
-      lastModified: DateTime.now().subtract(const Duration(hours: 2)),
-      contents: [
-        MediaContent.createText('Primeira anotação da sessão 1'),
-        MediaContent.createText('Segunda anotação importante'),
-      ],
-    ),
-    Session(
-      id: '2', 
-      title: 'Sessão 2 - Reunião',
-      createdAt: DateTime.now().subtract(const Duration(days: 1)),
-      lastModified: DateTime.now().subtract(const Duration(hours: 8)),
-      contents: [
-        MediaContent.createText('Pontos discutidos na reunião'),
-        MediaContent.createText('Ações a serem tomadas'),
-      ],
-    ),
-    Session(
-      id: '3',
-      title: 'Sessão 3 - Estudos',
-      createdAt: DateTime.now().subtract(const Duration(days: 2)),
-      lastModified: DateTime.now().subtract(const Duration(days: 2)),
-      contents: [
-        MediaContent.createText('Conceitos aprendidos'),
-        MediaContent.createText('Dúvidas para revisar'),
-      ],
-    ),
-  ];
+  // Lista de sessões - inicia vazia para que o usuário comece sem sessões pré-criadas
+  final List<Session> _sessions = [];
 
-  Session get _currentSession => _sessions[_selectedSessionIndex];
+  Session? get _currentSession => _sessions.isEmpty ? null : _sessions[_selectedSessionIndex];
 
   @override
   void initState() {
     super.initState();
-    _loadSessionMessages();
+    // Carrega as sessões do usuário logado
+    _loadUserSessions();
   }
 
-  Future<void> _loadSessionMessages() async {
+  Future<void> _loadUserSessions() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      final result = await ApiService.fetchSessionMessages(_currentSession.id);
+      final result = await ApiService.fetchUserSessions();
+      
+      if (result['success']) {
+        final List<Map<String, dynamic>> sessionsData = result['data'] as List<Map<String, dynamic>>;
+        
+        setState(() {
+          _sessions.clear();
+          // Converte os dados da API para objetos Session
+          for (var sessionData in sessionsData) {
+            _sessions.add(Session.fromMap(sessionData));
+          }
+          
+          // Se há sessões, seleciona a primeira e carrega suas mensagens
+          if (_sessions.isNotEmpty) {
+            _selectedSessionIndex = 0;
+            _isLoading = false;
+            // Carrega mensagens da primeira sessão
+            _loadSessionMessages();
+          } else {
+            _isLoading = false;
+          }
+        });
+      } else {
+        setState(() {
+          _errorMessage = result['message'];
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Erro ao carregar sessões: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadSessionMessages() async {
+    if (_currentSession == null) return;
+    
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final result = await ApiService.fetchSessionMessages(_currentSession!.id);
       
       if (result['success']) {
         setState(() {
@@ -92,7 +107,9 @@ class _HomeScreenState extends State<HomeScreen> {
   List<MediaContent> get _allContents {
     // Combina conteúdos locais e da API
     final List<MediaContent> allContents = [];
-    allContents.addAll(_currentSession.contents);
+    if (_currentSession != null) {
+      allContents.addAll(_currentSession!.contents);
+    }
     allContents.addAll(_apiMessages);
     
     // Ordena por data de criação
@@ -101,26 +118,67 @@ class _HomeScreenState extends State<HomeScreen> {
     return allContents;
   }
 
-  void _addTextNote() {
-    if (_noteController.text.isNotEmpty) {
-      final textContent = MediaContent.createText(_noteController.text);
-      setState(() {
-        _sessions[_selectedSessionIndex] = _currentSession.addContent(textContent);
-        _noteController.clear();
-      });
+  void _addTextNote() async {
+    if (_noteController.text.isNotEmpty && _currentSession != null) {
+      final String messageText = _noteController.text;
+      
+      // Limpa o campo imediatamente para melhorar UX
+      _noteController.clear();
+      
+      try {
+        // Salva a mensagem na API
+        final result = await ApiService.saveMessage(
+          sessionId: _currentSession!.id,
+          keyId: DateTime.now().millisecondsSinceEpoch.remainder(2147483647), // Garante key_id dentro do limite
+          text: messageText,
+        );
+        
+        if (result['success']) {
+          // Recarrega as mensagens para incluir a nova com timestamp correto da API
+          _loadSessionMessages();
+        } else {
+          // Se falhou, mostra erro e recoloca o texto no campo
+          setState(() {
+            _noteController.text = messageText;
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erro ao salvar mensagem: ${result['message']}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } catch (e) {
+        // Se houve erro de conexão, recoloca o texto e mostra erro
+        setState(() {
+          _noteController.text = messageText;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro de conexão: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   void _addMediaContent(MediaContent mediaContent) {
-    setState(() {
-      _sessions[_selectedSessionIndex] = _currentSession.addContent(mediaContent);
-    });
+    if (_currentSession != null) {
+      setState(() {
+        _sessions[_selectedSessionIndex] = _currentSession!.addContent(mediaContent);
+      });
+    }
   }
 
   void _deleteContent(String contentId) {
-    setState(() {
-      _sessions[_selectedSessionIndex] = _currentSession.removeContent(contentId);
-    });
+    if (_currentSession != null) {
+      setState(() {
+        _sessions[_selectedSessionIndex] = _currentSession!.removeContent(contentId);
+      });
+    }
   }
 
   void _selectSession(int index) {
@@ -136,35 +194,114 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (BuildContext context) {
         String newTitle = '';
-        return AlertDialog(
-          title: const Text('Nova Sessão'),
-          content: TextField(
-            onChanged: (value) => newTitle = value,
-            decoration: const InputDecoration(
-              hintText: 'Nome da sessão',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (newTitle.isNotEmpty) {
-                  final newSession = Session.createNew(newTitle);
-                  setState(() {
-                    _sessions.add(newSession);
-                    _selectedSessionIndex = _sessions.length - 1;
-                  });
-                  Navigator.pop(context);
-                  Navigator.pop(context); // Fecha o drawer
-                }
-              },
-              child: const Text('Criar'),
-            ),
-          ],
+        bool isCreating = false; // Estado para mostrar loading
+        
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Nova Sessão'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    onChanged: (value) => newTitle = value,
+                    decoration: const InputDecoration(
+                      hintText: 'Nome da sessão',
+                      border: OutlineInputBorder(),
+                    ),
+                    enabled: !isCreating, // Desabilita durante criação
+                  ),
+                  if (isCreating) ...[
+                    const SizedBox(height: 16),
+                    const Row(
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 12),
+                        Text('Criando sessão...'),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isCreating ? null : () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: isCreating ? null : () async {
+                    if (newTitle.isNotEmpty) {
+                      setDialogState(() {
+                        isCreating = true;
+                      });
+                      
+                      try {
+                        // Chama a API para criar a sessão no banco de dados
+                        // A sessão será automaticamente associada ao usuário logado
+                        final result = await ApiService.createSession(
+                          sessionName: newTitle,
+                        );
+                        
+                        if (result['success']) {
+                          Navigator.pop(context); // Fecha o diálogo
+                          Navigator.pop(context); // Fecha o drawer
+                          
+                          // Recarrega todas as sessões para incluir a nova
+                          await _loadUserSessions();
+                          
+                          // Seleciona a última sessão (a nova criada)
+                          if (_sessions.isNotEmpty) {
+                            setState(() {
+                              _selectedSessionIndex = _sessions.length - 1;
+                            });
+                            // Carrega mensagens da nova sessão
+                            _loadSessionMessages();
+                          }
+                          
+                          // Mostra mensagem de sucesso
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(result['message']),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        } else {
+                          // Se houve erro na API, mostra a mensagem
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(result['message']),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          
+                          setDialogState(() {
+                            isCreating = false;
+                          });
+                        }
+                      } catch (e) {
+                        // Se houve erro inesperado, mostra mensagem genérica
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Erro ao criar sessão: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        
+                        setDialogState(() {
+                          isCreating = false;
+                        });
+                      }
+                    }
+                  },
+                  child: const Text('Criar'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -174,7 +311,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_currentSession.title),
+        title: Text(_currentSession?.title ?? 'Anotation AI'),
         backgroundColor: Colors.deepPurple,
         foregroundColor: Colors.white,
         leading: Builder(
@@ -184,10 +321,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadSessionMessages,
-          ),
+          if (_currentSession != null)
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadSessionMessages,
+            ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
@@ -350,6 +488,39 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_errorMessage != null) {
       return Center(child: Text(_errorMessage!));
     }
+    
+    // Se não há sessões, mostra mensagem para criar uma
+    if (_sessions.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.add_circle_outline,
+              size: 80,
+              color: Colors.grey,
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Nenhuma sessão criada',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Abra o menu e crie sua primeira sessão',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
     if (_allContents.isEmpty) {
       return const Center(
         child: Column(
